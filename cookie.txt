@@ -1,0 +1,5 @@
+Made a txt file using nano.
+
+Curious to see what happens... also try making .html and .js file.
+
+Cheers =)
