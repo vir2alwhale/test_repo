@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Future Splash</title>
+    <link rel="stylesheet" href="../css/style.css">
+
+    <style>
+        .info {position: absolute;}
+        canvas {background-color: none}
+        div, p, h3, span {color: white}
+        h3 {margin: 10px 0px 0px 0px; padding: 0px 0px 0px 0px}
+    </style>
+
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.10.2/paper-full.min.js"></script>
+    <script type="text/paperscript" canvas="canvas">
+
+    document.body.style.backgroundColor = "#00A1E6"; // 21ABD7
+
+        // Code ported to Paper.js from http://the389.com/9/1/
+        // with permission.
+
+        // boolean to trigger wave based on Yg accelerometer value.
+        var trigger = false;
+        var triggerPoint = new Point(165,225)
+
+        var values = {
+            friction: 0.1,
+            timeStep: 0.1,
+            amount: 13,
+            mass: 2,
+            count: 0
+        };
+        values.invMass = 1 / values.mass;
+
+        var path, springs;
+        var size = view.size * [1, 1.2];
+
+        var Spring = function(a, b, strength, restLength) {
+            this.a = a;
+            this.b = b;
+            this.restLength = restLength || 20;
+            this.strength = strength ? strength : 0.55;
+            this.mamb = values.invMass * values.invMass;
+        };
+
+        Spring.prototype.update = function() {
+            var delta = this.b - this.a;
+            var dist = delta.length;
+            var normDistStrength = (dist - this.restLength) /
+                    (dist * this.mamb) * this.strength;
+            delta.y *= normDistStrength * values.invMass * 0.2;
+            if (!this.a.fixed)
+                this.a.y += delta.y;
+            if (!this.b.fixed)
+                this.b.y -= delta.y;
+        };
+
+
+        function createPath(strength) {
+            var path = new Path({
+                fillColor: '#0063A4' // 13608C
+            });
+            springs = [];
+            for (var i = 0; i <= values.amount; i++) {
+                var segment = path.add(new Point(i / values.amount, 0.5) * size);
+                var point = segment.point;
+                if (i == 0 || i == values.amount)
+                    point.y += size.height;
+                point.px = point.x;
+                point.py = point.y;
+                // The first two and last two points are fixed:
+                point.fixed = i < 2 || i > values.amount - 2;
+                if (i > 0) {
+                    var spring = new Spring(segment.previous.point, point, strength);
+                    springs.push(spring);
+                }
+            }
+            path.position.x -= size.width / 4;
+            return path;
+        }
+
+        function onResize() {
+            if (path)
+                path.remove();
+            size = view.bounds.size * [2, 1];
+            path = createPath(0.1);
+        }
+
+        //--//-- ADDING GYRO/MOTION --//--//
+
+        window.addEventListener('devicemotion', function(event) {
+            //console.log(event.acceleration.x + ' m/s2');
+            // acceleration excluding gravity - gyro
+            document.getElementById("aX").innerHTML = 'X: ' + event.acceleration.x.toFixed(2) + ' m/s2';
+            document.getElementById("aY").innerHTML = 'Y: ' + event.acceleration.y.toFixed(2) + ' m/s2';
+            document.getElementById("aZ").innerHTML = 'Z: ' + event.acceleration.z.toFixed(2) + ' m/s2';
+            // acceleration with gravity - accelerometer
+            document.getElementById("agX").innerHTML = 'Xg: ' + event.accelerationIncludingGravity.x.toFixed(2) + ' m/s2';
+            document.getElementById("agY").innerHTML = 'Yg: ' + event.accelerationIncludingGravity.y.toFixed(2) + ' m/s2';
+            document.getElementById("agZ").innerHTML = 'Zg: ' + event.accelerationIncludingGravity.z.toFixed(2) + ' m/s2';
+
+
+            if (event.accelerationIncludingGravity.y >= 8.0 && trigger == false) {
+
+                trigger = true;
+                document.getElementById("trigger").innerHTML = trigger;
+
+                splash();
+
+            }
+
+            if (event.accelerationIncludingGravity.y < 8.0){
+                trigger = false;
+            }
+            document.getElementById("trigger").innerHTML = trigger + ' ' + triggerPoint;
+        });
+        //--//--//--//--//--//
+
+        function onMouseMove(event) {
+            var location = path.getNearestLocation(event.point);
+            var segment = location.segment;
+            var point = segment.point;
+
+            document.getElementById("point_e").innerHTML = event.point;
+            document.getElementById("location").innerHTML = location;
+            document.getElementById("segment").innerHTML = segment;
+            document.getElementById("point").innerHTML = point;
+
+            if (!point.fixed && location.distance < size.height / 4) {
+                var y = event.point.y;
+                point.y += (y - point.y) / 6;
+                var previous = segment.previous && segment.previous.point;
+                var next = segment.next && segment.next.point;
+                if (previous && !previous.fixed)
+                    previous.y += (y - previous.y) / 24;
+                if (next && !next.fixed)
+                    next.y += (y - next.y) / 24;
+            }
+        }
+
+        function onFrame(event) {
+            updateWave(path);
+        }
+
+        function updateWave(path) {
+            var force = 1 - values.friction * values.timeStep * values.timeStep;
+            for (var i = 0, l = path.segments.length; i < l; i++) {
+                var point = path.segments[i].point;
+                var dy = (point.y - point.py) * force;
+                point.py = point.y;
+                point.y = Math.max(point.y + dy, 0);
+            }
+
+            for (var j = 0, l = springs.length; j < l; j++) {
+                springs[j].update();
+            }
+            path.smooth({ type: 'continuous' });
+        }
+
+        function onKeyDown(event) {
+            if (event.key == 'space') {
+                path.fullySelected = !path.fullySelected;
+                path.fillColor = path.fullySelected ? null : 'black';
+            }
+        }
+
+        function splash() {
+            var location = path.getNearestLocation(triggerPoint);
+                var segment = location.segment;
+                var point = segment.point;
+
+                if (!point.fixed && location.distance < size.height / 4) {
+                    var y = triggerPoint.y;
+                    point.y += (y - point.y) / 6;
+                    var previous = segment.previous && segment.previous.point;
+                    var next = segment.next && segment.next.point;
+                    if (previous && !previous.fixed)
+                        previous.y += (y - previous.y) / 24;
+                    if (next && !next.fixed)
+                        next.y += (y - next.y) / 24;
+                }
+        }
+
+
+
+    </script>
+
+    <script type="text/javascript">
+        function javaButtonPress() {
+            document.getElementById("jstext").innerHTML = 'BUTTON WORKED!!!';
+            splash();
+        }
+    </script>
+</head>
+<body>
+    <div class="info">
+        <span id="aX">Acceleration</span>
+        <span id="aY">Acceleration</span>
+        <span id="aZ">Acceleration</span>
+        <br>
+        <span id="agX">Acceleration</span>
+        <span id="agY">Acceleration</span>
+        <span id="agZ">Acceleration</span>
+        <br>
+        <h3>EVENT POINT</h3>
+        <div id="point_e">Event point</div>
+        <h3>NEAREST PATH LOCATION</h3>
+        <div id="location">Location</div>
+        <h3>SEGMENT AT LOCATION</h3>
+        <div id="segment">Segment</div>
+        <h3>POINT ON SEGMENT</h3>
+        <div id="point">Point</div>
+        <h3>ACCELEROMETER TRIGGER</h3>
+        <div id="trigger">trigger</div>
+        <h3>Java button to JS text</h3>
+        <div id="jstext">CHANGE ME!</div>
+    </div>
+    <canvas id="canvas" resize hidpi="off"></canvas>
+</body>
+</html>
